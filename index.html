@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>天赋树系统</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background: #1a1a1a;
+        }
+        canvas {
+            display: block;
+        }
+        .info {
+            position: fixed;
+            top: 10px;
+            left: 10px;
+            color: white;
+            font-family: Arial, sans-serif;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 10px;
+            border-radius: 5px;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="talentTree"></canvas>
+    <div class="info">
+        滚轮：缩放<br>
+        点击：激活/升级天赋<br>
+        可用点数: <span id="points">10</span>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('talentTree');
+        const ctx = canvas.getContext('2d');
+        let scale = 1;
+        let offsetX = 0;
+        let offsetY = 0;
+        let points = 10;
+
+        // 天赋节点数据
+        const talents = [
+            { id: 1, x: 400, y: 100, level: 0, maxLevel: 5, name: "基础天赋", active: false, requires: [] },
+            { id: 2, x: 300, y: 200, level: 0, maxLevel: 3, name: "力量强化", active: false, requires: [1] },
+            { id: 3, x: 500, y: 200, level: 0, maxLevel: 3, name: "敏捷强化", active: false, requires: [1] },
+            { id: 4, x: 200, y: 100, level: 0, maxLevel: 3, name: "武器专精", active: false, requires: [2] },
+            { id: 5, x: 600, y: 100, level: 0, maxLevel: 3, name: "闪避强化", active: false, requires: [3] }
+        ];
+
+        // 连接线数据
+        const connections = [
+            [1, 2],
+            [1, 3],
+            [2, 4],
+            [3, 5]
+        ];
+
+        // 设置Canvas尺寸
+        function resizeCanvas() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        }
+
+        // 初始化
+        resizeCanvas();
+        window.addEventListener('resize', resizeCanvas);
+
+        // 绘制连接线
+        function drawConnections() {
+            ctx.beginPath();
+            ctx.strokeStyle = '#444';
+            ctx.lineWidth = 2;
+
+            connections.forEach(([fromId, toId]) => {
+                const from = talents.find(t => t.id === fromId);
+                const to = talents.find(t => t.id === toId);
+                
+                if (from.active) {
+                    ctx.strokeStyle = '#0f0';
+                } else {
+                    ctx.strokeStyle = '#444';
+                }
+
+                ctx.beginPath();
+                ctx.moveTo(from.x * scale + offsetX, from.y * scale + offsetY);
+                ctx.lineTo(to.x * scale + offsetX, to.y * scale + offsetY);
+                ctx.stroke();
+            });
+        }
+
+        // 绘制天赋节点
+        function drawTalents() {
+            talents.forEach(talent => {
+                ctx.beginPath();
+                ctx.arc(talent.x * scale + offsetX, talent.y * scale + offsetY, 30 * scale, 0, Math.PI * 2);
+                
+                if (talent.active) {
+                    const gradient = ctx.createRadialGradient(
+                        talent.x * scale + offsetX, talent.y * scale + offsetY, 0,
+                        talent.x * scale + offsetX, talent.y * scale + offsetY, 30 * scale
+                    );
+                    gradient.addColorStop(0, '#00ff00');
+                    gradient.addColorStop(1, '#006600');
+                    ctx.fillStyle = gradient;
+                } else {
+                    ctx.fillStyle = '#333';
+                }
+                
+                ctx.fill();
+                ctx.strokeStyle = '#666';
+                ctx.lineWidth = 2;
+                ctx.stroke();
+
+                // 绘制文字
+                ctx.fillStyle = '#fff';
+                ctx.font = `${12 * scale}px Arial`;
+                ctx.textAlign = 'center';
+                ctx.fillText(talent.name, talent.x * scale + offsetX, (talent.y - 5) * scale + offsetY);
+                ctx.fillText(`${talent.level}/${talent.maxLevel}`, talent.x * scale + offsetX, (talent.y + 15) * scale + offsetY);
+            });
+        }
+
+        // 检查是否可以激活天赋
+        function canActivateTalent(talent) {
+            if (points <= 0) return false;
+            if (talent.level >= talent.maxLevel) return false;
+            
+            // 检查前置天赋是否已满级
+            return talent.requires.every(reqId => {
+                const reqTalent = talents.find(t => t.id === reqId);
+                return reqTalent.level === reqTalent.maxLevel;
+            });
+        }
+
+        // 点击处理
+        canvas.addEventListener('click', (e) => {
+            const rect = canvas.getBoundingClientRect();
+            const clickX = (e.clientX - rect.left - offsetX) / scale;
+            const clickY = (e.clientY - rect.top - offsetY) / scale;
+
+            talents.forEach(talent => {
+                const dx = talent.x - clickX;
+                const dy = talent.y - clickY;
+                const distance = Math.sqrt(dx * dx + dy * dy);
+
+                if (distance < 30) {
+                    if (canActivateTalent(talent)) {
+                        talent.active = true;
+                        talent.level++;
+                        points--;
+                        document.getElementById('points').textContent = points;
+                    }
+                }
+            });
+
+            draw();
+        });
+
+        // 滚轮缩放
+        canvas.addEventListener('wheel', (e) => {
+            e.preventDefault();
+            const delta = e.deltaY > 0 ? 0.9 : 1.1;
+            const oldScale = scale;
+            scale *= delta;
+            scale = Math.min(Math.max(0.5, scale), 2);
+
+            // 调整偏移以保持鼠标位置不变
+            const rect = canvas.getBoundingClientRect();
+            const mouseX = e.clientX - rect.left;
+            const mouseY = e.clientY - rect.top;
+            
+            offsetX = mouseX - (mouseX - offsetX) * (scale / oldScale);
+            offsetY = mouseY - (mouseY - offsetY) * (scale / oldScale);
+
+            draw();
+        });
+
+        // 主绘制函数
+        function draw() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            drawConnections();
+            drawTalents();
+        }
+
+        // 初始绘制
+        offsetX = canvas.width / 2 - 400;
+        offsetY = canvas.height / 2 - 200;
+        draw();
+    </script>
+</body>
+</html>
